@@ -1,0 +1,299 @@
+---
+title: "CUNY MSDS DATA 606 - Final Project - Statistical Analysis  "
+author: "Nicholas Schettini"
+date: "May 13, 2018"
+output:
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+---
+
+### Libraries 
+
+```{r setup, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+# load data
+library(tidyverse)
+library(fueleconomy)
+library(knitr)
+library(ggthemes)
+library(kableExtra)
+library(ggiraph)
+```
+
+
+### 1.) Introduction
+
+In today's money-conscious and eco-friendly society, consumers are usually concerned with how many MPG their new vehicle will bring them.  Vehicles that are more eco-friendly help our environment, and also help consumers save money on ever-rising gas prices.  This study will focus on answering the following questions:
+
+- Has the average combined highway and city MPG changed over time.  If so, how?
+
+- How does the number of cylinders a vehicle has impact it's combined MPG?
+
+- How does a vehicles displacment impact it's combined MPG?
+
+
+### 2.) Data 
+
+The data is collected from the R package: fueleconomy.  The fueleconomy package's data was collected from the Environmental Protection Agency's website.  The data is stored in the **vehicles** dataset.
+
+The cases represent the various vehicles between years 1984 - 2015. There are 33,442 cases of vehicle data within the fueleconomy package.
+
+The study is an observational study.  The response variable is the combined (highway and city) MPG. The explanatory variable is how the fuel economy is effected by the number of cylinders and displacment in a vehicle.
+ 
+
+
+Information relating to the data in this study can be found at the following links:
+https://blog.rstudio.com/2014/07/23/new-data-packages/
+
+https://www.fueleconomy.gov/feg/download.shtml 
+
+
+### 3 & 4.) Exploratory Data Analysis & Infrence
+
+An overview of the data found within the *vehicles* package is below:
+```{r}
+summary(vehicles)
+```
+
+
+The vehicle dataset found within the fueleconomy package does not contain data on combined MPG.  Instead, the dataset gives us the highway *(hwy)* and city *(cty)* MPG.  In order to answer the research question, we must first combine *hwy* and *cty* into one combined variable: *mpg*.  
+
+In order to calculate this variable, the *hwy* and *cty* variables must be combined using the EPA standards: $$cty * 0.55 + hwy * 0.45$$
+
+This value was then added to the vehicles dataset as *mpg*
+```{r}
+#remove data that has null values
+vehicles <- na.omit(vehicles)
+
+#combine hwy and cty mpg following EPA standards
+vehicles <- vehicles %>%
+  mutate(mpg = 0.55 * vehicles$cty + 0.45 * vehicles$hwy)
+```
+
+Now that our *mpg* variable has been calculated, we can do some further investigation.
+
+
+```{r}
+ggplot1 <- ggplot(vehicles, aes(factor(vehicles$year), vehicles$mpg)) +
+  geom_boxplot_interactive(aes(tooltip = vehicles$year, data_id = year, fill = factor(vehicles$year)))     +
+  theme(legend.position="none")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_hline(aes(yintercept = median(mpg)), colour = 'red')
+
+ggiraph(code = print(ggplot1))
+```
+
+The boxplot confirms our summary statistics above - the data seems to hover around the median of 19.70 MPG, until around the year 2009 when it starts to show an increase in the average combined MPG.
+
+
+```{r}
+qqnorm(vehicles$mpg)
+qqline(vehicles$mpg)
+```
+
+
+```{r}
+ggplot(vehicles, aes(sample = mpg)) + 
+  stat_qq(aes(color = factor(year))) +
+  ylab("Sample Quantiles - MPG")
+```
+The two Q-Q plots also show that after 2009, the average combined MPG shows an increase.
+
+```{r}
+mpg_year <- vehicles %>%
+  group_by(year) %>%
+  dplyr::summarise(n = n(), avgmpg = mean(mpg), median = median(mpg), sd = sd(mpg))
+  
+  
+kable(mpg_year, "html", escape = F) %>%
+  kable_styling("striped", full_width = T) %>%
+  column_spec(1, bold = T) %>%
+  row_spec(32, bold = T, color = "white", background = "green")  %>%
+  row_spec(1, bold = T, color = "white", background = "red")
+```
+
+```{r}
+ggplotint2 <- ggplot(mpg_year, aes(mpg_year$year, mpg_year$avgmpg)) +
+  geom_point_interactive(tooltip = mpg_year$avgmpg, data_id = mpg_year$avgmpg) +
+  geom_smooth() +
+  ggtitle("MPG vs. Year") +
+  xlab("Years: 1985-2015") +
+  ylab("Combined MPG")
+
+
+ggiraph(code = print(ggplotint2))
+```
+
+
+The data above seem indicate that there is a right-skew within the combined MPG data.  The data seems to show a mostly normal distribution. The data shows that combined MPG begins to increase after the year 2009.
+
+$$H_0: \mu_{1984} = \mu_{2015}$$
+
+$$H_a: \mu_{1984} \neq \mu_{2015}$$
+
+
+```{r}
+diff_years <- mpg_year %>%
+  filter(year == "1984" | year == "2015")
+
+kable(diff_years)
+```
+
+
+
+$$T = \frac{(\bar{x}_{1}-\bar{x}_{2}) - \mu_0}{\sqrt{\frac{s_{1984}^2}{n_{1984}} + \frac{s_{2015}^2}{n_{2015}}}}$$
+```{r}
+s1984 <- 4.182516
+s2015 <- 4.898900
+n1984 <- 784
+n2015 <- 204
+xbar1984 <- 17.15944
+xbar2015 <- 23.87426
+u0 <- 0
+
+xdiff <-  xbar2015 - xbar1984
+SE <- sqrt((s1984^2/n1984) + (s2015^2/n2015))
+t <-  (xdiff-u0)/SE
+2 * (1 - pt(17.94891, df = 203))
+```
+
+Check to see if variance is equal to determine type of T test
+```{r}
+test1984 <- filter(vehicles, year == "1984")
+test1984 <- test1984$mpg
+
+test2015 <- filter(vehicles, year == "2015")
+test2015 <- test2015$mpg
+
+var.test(test1984, test2015)
+```
+Since the p-score is low, the Null Hypothesis is rejected.  The variance is not equal.
+
+Using the t.test function to calculate p-value on the 1984 and 2015 data.
+```{r}
+t.test(test1984, test2015,  var.equal = F)
+```
+
+Since the p-value is low - null must go; meaning, the $H_0$ is rejected and $H_a$ is accepted.  There is signicant evidence that fuel economy has changed from 1984 and 2015.
+
+Running ANOVA on all of the years in the dataset:
+
+
+```{r}
+model_year <- lm(mpg~factor(year), data = vehicles)
+anova(model_year)
+```
+The ANOVA test also shows a p-value < 0.05.  Meaning, he $H_0$ is rejected and $H_a$ is accepted. There is signicant evidence that fuel economy has changed from 1984 through 2015.
+
+
+
+
+
+
+
+### How does the number of cylinders impact the average combined MPG?
+
+```{r}
+ggplotint3 <- ggplot(vehicles, aes(factor(cyl), mpg)) +
+  geom_boxplot_interactive(aes(tooltip = mpg, data_id = mpg, fill=factor(cyl))) +
+  theme(legend.position="none")
+
+ggiraph(code = print(ggplotint3))
+```
+
+```{r}
+ggplot(vehicles, aes(sample = mpg)) + 
+  stat_qq(aes(color = factor(cyl))) 
+```
+
+
+```{r}
+ggplot(vehicles, aes(mpg)) + 
+  geom_histogram( bins = 50, aes(fill = factor(cyl))) 
+```
+
+
+```{r}
+mpg_cyl <- vehicles %>%
+  group_by(cyl) %>%
+  dplyr::summarise(n = n(), avgmpg = mean(mpg), median = median(mpg), sd = sd(mpg))
+                
+kable(mpg_cyl, "html", escape = F) %>%
+  kable_styling("striped", full_width = T) %>%
+  column_spec(1, bold = T) %>%
+  row_spec(2, bold = T, color = "white", background = "green")  %>%
+  row_spec(9, bold = T, color = "white", background = "red")
+```
+
+```{r}
+ggplotint <- ggplot(mpg_cyl, aes(mpg_cyl$cyl, mpg_cyl$avgmpg)) +
+  geom_point() +
+  geom_smooth()
+
+```
+
+Looking at the graphs: on average, as the number of cylinders increases, the average combined MPG decreases.
+
+Stastiscally we can test this by running the ANOVA test.  ANOVA is used in this case since we are testing more than two samples.
+
+$$H_0: \mu_2 = \mu_3 = \mu_4 = \mu_5 = \mu_6 = \mu_8 = \mu_{10} = \mu_{12} = \mu_{16}$$
+$$H_a: \mu_2 \neq \mu_3 \neq \mu_4 \neq \mu_5 \neq \mu_6 \neq \mu_8 \neq \mu_{10} \neq \mu_{12} \neq \mu_{16}$$
+
+
+```{r}
+model <- lm(mpg~factor(cyl), data = vehicles)
+```
+
+```{r}
+anova(model)
+```
+Since the p-value is low (less than 0.05) - null must go; meaning, the $H_0$ is rejected and the $H_a$ is accepted.  There is signicant evidence that fuel economy is different for engines with different # of cylinders.
+
+
+
+
+
+
+### How does the number of displacment impact the average combined MPG?
+```{r}
+ ggplot(vehicles, aes(vehicles$displ, mpg)) +
+  geom_point(aes( color=factor(cyl), alpha = factor(cyl))) +
+  theme_minimal() +
+  geom_smooth()
+
+```
+
+
+
+
+```{r}
+model_dis <- lm(mpg~as.factor(displ), data = vehicles)
+anova(model_dis)
+```
+
+Since the p-value is low - null must go; meaning, the H0 is rejected.  There is signicant evidence that fuel economy is different for engines with different #'s of displacment.
+
+
+###Correlogram
+```{r}
+library(corrgram)
+corrgram(vehicles, order=TRUE, 
+         lower.panel=panel.shade,
+        upper.panel=panel.pie, 
+        text.panel=panel.txt,
+        main="MPG Data")
+
+```
+
+From the above graph, we can see correlations between different variables in our dataset.  For example: hwy, cty, and mpg are positively correlated.  While hwy, mpg and cyl are negativelty correlated. 
+
+
+
+
+###Conclusions: 
+
+After analyzing the fueleconomy package from the EPA, the data shows that the average MPG has increased since 1984 to 2015.  From around ~17MPG to 23MPG.  
+
+According to the data, there is signicant evidence that fuel economy is different for engines with different # of cylinders.  The data shows that overall, the more cylinders in a vehicle, the less overall MPG.
+
+There is also signicant evidence that fuel economy is different for engines with different #’s of displacment.  According to the data, overall, the more displacment the less the overall MPG.
